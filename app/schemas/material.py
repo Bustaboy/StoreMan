@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, computed_field
 
 
 class MaterialResponse(BaseModel):
@@ -13,3 +13,18 @@ class MaterialResponse(BaseModel):
     location: str | None
     sap_material_number: str | None
     is_serialized: bool
+
+    @computed_field
+    @property
+    def code(self) -> str:
+        return self.material_number
+
+    @computed_field
+    @property
+    def name(self) -> str:
+        return self.description
+
+    @computed_field
+    @property
+    def quantity_on_hand(self) -> int:
+        return self.quantity

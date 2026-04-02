@@ -60,7 +60,7 @@ class MaterialRepository:
     async def search_materials(self, query: str, limit: int = 50) -> list[Material]:
         clean_limit = max(limit, 1)
         search_result = self.meili_client.index('materials').search(query, {'limit': clean_limit})
-        hits = search_result.get('hits', [])
+        hits = search_result.get('hits', []) if isinstance(search_result, dict) else getattr(search_result, 'hits', [])
         material_numbers = [
             str(hit.get('material_number') or hit.get('id'))
             for hit in hits
@@ -113,9 +113,12 @@ class MaterialRepository:
             {
                 'id': row.material_number,
                 'material_number': row.material_number,
+                'code': row.material_number,
                 'description': row.description,
+                'name': row.description,
                 'category': row.category,
                 'quantity': int(row.quantity or 0),
+                'quantity_on_hand': int(row.quantity or 0),
                 'location': row.location,
                 'sap_material_number': row.sap_material_number,
                 'is_serialized': bool(row.is_serialized),
