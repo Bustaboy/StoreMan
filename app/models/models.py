@@ -238,8 +238,6 @@ class WorkOrder(Base):
 
     material: Mapped[Material] = relationship(back_populates="work_orders")
     project_reservation: Mapped[ProjectReservation | None] = relationship(back_populates="work_orders")
-    maintenance_records: Mapped[list[MaintenanceRecord]] = relationship(back_populates="work_order")
-    assemblies: Mapped[list[Assembly]] = relationship(back_populates="work_order")
 
 
 class Transaction(Base):
@@ -280,7 +278,6 @@ class Assembly(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     assembly_number: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     material_id: Mapped[str] = mapped_column(String(100), ForeignKey("materials.material_number"), nullable=False)
-    work_order_id: Mapped[int | None] = mapped_column(ForeignKey("work_orders.id"), nullable=True)
     description: Mapped[str] = mapped_column(String(255), nullable=False)
     bom_notes: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), nullable=False)
@@ -289,7 +286,6 @@ class Assembly(Base):
         back_populates="assemblies",
         foreign_keys=[material_id],
     )
-    work_order: Mapped[WorkOrder | None] = relationship(back_populates="assemblies")
     components: Mapped[list[AssemblyComponent]] = relationship(
         back_populates="assembly",
         cascade="all, delete-orphan",
@@ -366,7 +362,6 @@ class MaintenanceRecord(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     inventory_item_id: Mapped[int] = mapped_column(ForeignKey("inventory_items.id"), nullable=False)
-    work_order_id: Mapped[int | None] = mapped_column(ForeignKey("work_orders.id"), nullable=True)
     type: Mapped[MaintenanceType] = mapped_column(
         SAEnum(MaintenanceType, name="maintenance_type"),
         nullable=False,
@@ -382,4 +377,3 @@ class MaintenanceRecord(Base):
     next_due_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     inventory_item: Mapped[InventoryItem] = relationship(back_populates="maintenance_records")
-    work_order: Mapped[WorkOrder | None] = relationship(back_populates="maintenance_records")
