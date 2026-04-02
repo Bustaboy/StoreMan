@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from enum import Enum
 
-from sqlalchemy import Boolean, Date, DateTime, Enum as SAEnum, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Enum as SAEnum, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -59,8 +59,8 @@ class Material(Base):
     __tablename__ = "materials"
 
     material_number: Mapped[str] = mapped_column(String(100), primary_key=True, unique=True)
-    description: Mapped[str] = mapped_column(String, nullable=False)
-    category: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str] = mapped_column(String(255), nullable=False)
+    category: Mapped[str] = mapped_column(String(100), nullable=False)
     is_serialized: Mapped[bool] = mapped_column(Boolean, default=False)
     is_assembly: Mapped[bool] = mapped_column(Boolean, default=False)
     min_stock: Mapped[int | None] = mapped_column(Integer)
@@ -68,11 +68,11 @@ class Material(Base):
     safety_stock: Mapped[int | None] = mapped_column(Integer)
     default_location_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id"), nullable=True)
     is_dangerous_good: Mapped[bool] = mapped_column(Boolean, default=False)
-    dg_class: Mapped[str | None] = mapped_column(String, nullable=True)
-    dg_un_number: Mapped[str | None] = mapped_column(String, nullable=True)
-    dg_proper_shipping_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    dg_class: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    dg_un_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    dg_proper_shipping_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     dg_segregation_rules: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    sap_material_number: Mapped[str | None] = mapped_column(String, nullable=True)
+    sap_material_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     inventory_items: Mapped[list[InventoryItem]] = relationship(back_populates="material")
     default_location: Mapped[Location | None] = relationship(
@@ -96,13 +96,13 @@ class InventoryItem(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     material_id: Mapped[str] = mapped_column(String(100), ForeignKey("materials.material_number"))
-    serial_number: Mapped[str | None] = mapped_column(String, nullable=True)
-    batch_number: Mapped[str | None] = mapped_column(String, nullable=True)
+    serial_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    batch_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     expiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     quantity: Mapped[int] = mapped_column(Integer, default=1)
     location_id: Mapped[int] = mapped_column(ForeignKey("locations.id"))
-    status: Mapped[str] = mapped_column(String, default="IN_STOCK")
-    revision: Mapped[str | None] = mapped_column(String, nullable=True)
+    status: Mapped[str] = mapped_column(String(50), default="IN_STOCK")
+    revision: Mapped[str | None] = mapped_column(String(50), nullable=True)
     project_specific_bom_notes: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     is_assembly_instance: Mapped[bool] = mapped_column(Boolean, default=False)
 
@@ -112,14 +112,15 @@ class InventoryItem(Base):
     reservation_links: Mapped[list[ReservationLink]] = relationship(back_populates="inventory_item")
     transactions: Mapped[list[Transaction]] = relationship(back_populates="inventory_item")
     maintenance_records: Mapped[list[MaintenanceRecord]] = relationship(back_populates="inventory_item")
+    putaway_lines: Mapped[list[PutawayLine]] = relationship(back_populates="inventory_item")
 
 
 class Location(Base):
     __tablename__ = "locations"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    name: Mapped[str] = mapped_column(String, unique=True)
-    type: Mapped[str] = mapped_column(String)
+    name: Mapped[str] = mapped_column(String(100), unique=True)
+    type: Mapped[str] = mapped_column(String(50))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     inventory_items: Mapped[list[InventoryItem]] = relationship(back_populates="location")
@@ -185,20 +186,21 @@ class ProjectReservation(Base):
     __tablename__ = "project_reservations"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    project_name: Mapped[str] = mapped_column(String, nullable=False)
-    vessel: Mapped[str] = mapped_column(String, nullable=False)
+    project_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    vessel: Mapped[str] = mapped_column(String(100), nullable=False)
     load_close_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     mat_close_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     start_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     expected_end_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     expected_demobilization_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     expected_return_at_boys: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    status: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=False)
 
     reservation_links: Mapped[list[ReservationLink]] = relationship(
         back_populates="project_reservation",
         cascade="all, delete-orphan",
     )
+    work_orders: Mapped[list[WorkOrder]] = relationship(back_populates="project_reservation")
 
 
 class ReservationLink(Base):
@@ -219,10 +221,11 @@ class WorkOrder(Base):
     __tablename__ = "work_orders"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    work_order_number: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    work_order_number: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     material_id: Mapped[str] = mapped_column(String(100), ForeignKey("materials.material_number"), nullable=False)
+    project_reservation_id: Mapped[int | None] = mapped_column(ForeignKey("project_reservations.id"), nullable=True)
     quantity_to_build: Mapped[int] = mapped_column(Integer, nullable=False)
-    assigned_technician: Mapped[str | None] = mapped_column(String, nullable=True)
+    assigned_technician: Mapped[str | None] = mapped_column(String(100), nullable=True)
     status: Mapped[WorkOrderStatus] = mapped_column(
         SAEnum(WorkOrderStatus, name="work_order_status"),
         default=WorkOrderStatus.PENDING,
@@ -234,13 +237,14 @@ class WorkOrder(Base):
     completed_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     material: Mapped[Material] = relationship(back_populates="work_orders")
+    project_reservation: Mapped[ProjectReservation | None] = relationship(back_populates="work_orders")
 
 
 class Transaction(Base):
     __tablename__ = "transactions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    date: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    date: Mapped[datetime] = mapped_column(DateTime, default=func.now(), nullable=False)
     type: Mapped[TransactionType] = mapped_column(
         SAEnum(TransactionType, name="transaction_type"),
         nullable=False,
@@ -251,8 +255,8 @@ class Transaction(Base):
     to_location_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id"), nullable=True)
     handling_unit_id: Mapped[int | None] = mapped_column(ForeignKey("handling_units.id"), nullable=True)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
-    user: Mapped[str] = mapped_column(String, nullable=False)
-    reference: Mapped[str | None] = mapped_column(String, nullable=True)
+    user: Mapped[str] = mapped_column(String(100), nullable=False)
+    reference: Mapped[str | None] = mapped_column(String(100), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     material: Mapped[Material] = relationship(back_populates="transactions")
@@ -272,9 +276,9 @@ class Assembly(Base):
     __tablename__ = "assemblies"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    assembly_number: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    assembly_number: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     material_id: Mapped[str] = mapped_column(String(100), ForeignKey("materials.material_number"), nullable=False)
-    description: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str] = mapped_column(String(255), nullable=False)
     bom_notes: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
@@ -311,15 +315,15 @@ class Receipt(Base):
     __tablename__ = "receipts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    receipt_number: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    receipt_number: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     receipt_type: Mapped[ReceiptType] = mapped_column(
         SAEnum(ReceiptType, name="receipt_type"),
         nullable=False,
     )
-    sap_po_number: Mapped[str | None] = mapped_column(String, nullable=True)
+    sap_po_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     received_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
-    received_by: Mapped[str] = mapped_column(String, nullable=False)
-    reference: Mapped[str | None] = mapped_column(String, nullable=True)
+    received_by: Mapped[str] = mapped_column(String(100), nullable=False)
+    reference: Mapped[str | None] = mapped_column(String(100), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     putaway_lines: Mapped[list[PutawayLine]] = relationship(
@@ -337,12 +341,12 @@ class PutawayLine(Base):
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     proposed_location_id: Mapped[int] = mapped_column(ForeignKey("locations.id"), nullable=False)
     adjusted_location_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id"), nullable=True)
-    status: Mapped[str] = mapped_column(String, default="PENDING", nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)
     putaway_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    putaway_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    putaway_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     receipt: Mapped[Receipt] = relationship(back_populates="putaway_lines")
-    inventory_item: Mapped[InventoryItem] = relationship()
+    inventory_item: Mapped[InventoryItem] = relationship(back_populates="putaway_lines")
     proposed_location: Mapped[Location] = relationship(
         back_populates="putaway_lines_proposed",
         foreign_keys=[proposed_location_id],
@@ -368,7 +372,7 @@ class MaintenanceRecord(Base):
         nullable=False,
     )
     performed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    performed_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    performed_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     next_due_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
