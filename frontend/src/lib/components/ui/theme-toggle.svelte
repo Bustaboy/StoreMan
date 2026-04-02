@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import Button from '$lib/components/ui/button/button.svelte';
 
   let theme = $state<'light' | 'dark'>('light');
@@ -9,13 +10,14 @@
     localStorage.setItem('theme', next);
   }
 
-  $effect(() => {
-    const saved = localStorage.getItem('theme') as 'light' | 'dark' | null;
+  onMount(() => {
+    const saved = localStorage.getItem('theme');
+    const savedTheme = saved === 'dark' || saved === 'light' ? saved : null;
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    applyTheme(saved ?? (prefersDark ? 'dark' : 'light'));
+    applyTheme(savedTheme ?? (prefersDark ? 'dark' : 'light'));
   });
 </script>
 
-<Button variant="ghost" on:click={() => applyTheme(theme === 'dark' ? 'light' : 'dark')}>
+<Button variant="ghost" onclick={() => applyTheme(theme === 'dark' ? 'light' : 'dark')}>
   {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
 </Button>
