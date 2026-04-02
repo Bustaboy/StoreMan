@@ -18,37 +18,23 @@ class MaterialRepository:
             self.settings.meilisearch_master_key,
         )
 
-    async def list_materials(self, limit: int = 100, offset: int = 0) -> tuple[list[Material], int]:
+    async def get_materials(self, skip: int = 0, limit: int = 100) -> list[Material]:
+        clean_skip = max(skip, 0)
         clean_limit = max(limit, 1)
-        clean_offset = max(offset, 0)
-
-        items_stmt = (
+        stmt = (
             select(Material)
             .order_by(Material.material_number)
+            .offset(clean_skip)
             .limit(clean_limit)
-            .offset(clean_offset)
         )
-        total_stmt = select(func.count()).select_from(Material)
-
         async with self.session_factory() as session:
-            items = list((await session.scalars(items_stmt)).all())
-            total = int((await session.scalar(total_stmt)) or 0)
+            return list((await session.scalars(stmt)).all())
 
-        return items, total
-
-    async def search_materials(self, query: str, limit: int = 25, offset: int = 0) -> list[Material]:
+    async def search_materials(self, query: str, limit: int = 50) -> list[Material]:
         clean_limit = max(limit, 1)
-        clean_offset = max(offset, 0)
-
-        try:
-            return await self._search_with_meilisearch(query=query, limit=clean_limit, offset=clean_offset)
-        except Exception:
-            return await self._search_with_postgres(query=query, limit=clean_limit, offset=clean_offset)
-
-    async def _search_with_meilisearch(self, query: str, limit: int, offset: int) -> list[Material]:
         search_result = self.meili_client.index('materials').search(
             query,
-            {'limit': limit, 'offset': offset},
+            {'limit': clean_limit},
         )
 
         hits = search_result.get('hits', [])
@@ -67,7 +53,8 @@ class MaterialRepository:
 
         return sorted(materials, key=lambda material: order.get(material.material_number, len(order)))
 
-    async def _search_with_postgres(self, query: str, limit: int, offset: int) -> list[Material]:
+    async def search_materials_db(self, query: str, limit: int = 50) -> list[Material]:
+        clean_limit = max(limit, 1)
         vector = func.to_tsvector(
             'simple',
             func.concat_ws(' ', Material.material_number, Material.description, Material.category),
@@ -78,12 +65,28 @@ class MaterialRepository:
             select(Material)
             .where(vector.op('@@')(ts_query))
             .order_by(func.ts_rank(vector, ts_query).desc(), Material.material_number.asc())
-            .limit(limit)
-            .offset(offset)
+            .limit(clean_limit)
         )
 
         async with self.session_factory() as session:
             return list((await session.scalars(stmt)).all())
+
+    async def sync_materials_to_meilisearch(self) -> int:
+        async with self.session_factory() as session:
+            materials = list((await session.scalars(select(Material))).all())
+
+        documents = [
+            {
+                'id': material.material_number,
+                'material_number': material.material_number,
+                'description': material.description,
+                'category': material.category,
+                'sap_material_number': material.sap_material_number,
+            }
+            for material in materials
+        ]
+        self.meili_client.index('materials').add_documents(documents, primary_key='id')
+        return len(documents)
 
 
 material_repository = MaterialRepository()
