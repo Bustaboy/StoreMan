@@ -18,4 +18,6 @@ class MaterialResponse(BaseModel):
     material_number: str
     description: str
     category: str
+    quantity: int
+    location: str | None
     sap_material_number: str | None
