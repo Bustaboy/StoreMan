@@ -22,6 +22,7 @@ services:
       - .env
     depends_on:
       - redis
+      - pgbouncer
     command: celery -A app.celery_app.celery_app worker --loglevel=info
     volumes:
       - .:/app

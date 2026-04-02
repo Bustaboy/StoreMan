@@ -4,6 +4,8 @@ from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 
+__version__ = '0.1.0'
+
 settings = get_settings()
 configure_logging(settings.log_level)
 
