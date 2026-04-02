@@ -1,14 +1,58 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
+from enum import Enum
 
-from sqlalchemy import Boolean, Date, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Date, DateTime, Enum as SAEnum, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
     pass
+
+
+class WorkOrderStatus(str, Enum):
+    PENDING = "Pending"
+    IN_PROGRESS = "In Progress"
+    ON_HOLD = "On Hold"
+    COMPLETED = "Completed"
+    CANCELLED = "Cancelled"
+
+
+class TransactionType(str, Enum):
+    RECEIVE = "RECEIVE"
+    ISSUE = "ISSUE"
+    MOVE = "MOVE"
+    RESERVE = "RESERVE"
+    RETURN = "RETURN"
+    SCRAP = "SCRAP"
+    MAINTENANCE = "MAINTENANCE"
+    PACK_HU = "PACK_HU"
+    PUTAWAY = "PUTAWAY"
+    ASSEMBLE = "ASSEMBLE"
+    DISASSEMBLE = "DISASSEMBLE"
+
+
+class ReceiptType(str, Enum):
+    PURCHASE_ORDER = "PURCHASE_ORDER"
+    RETURN = "RETURN"
+    TRANSFER = "TRANSFER"
+    MANUAL = "MANUAL"
+
+
+class MaintenanceType(str, Enum):
+    PREVENTIVE = "PREVENTIVE"
+    CORRECTIVE = "CORRECTIVE"
+    CALIBRATION = "CALIBRATION"
+    INSPECTION = "INSPECTION"
+
+
+class MaintenanceStatus(str, Enum):
+    OPEN = "OPEN"
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
 
 
 class Material(Base):
@@ -35,6 +79,16 @@ class Material(Base):
         back_populates="default_for_materials",
         foreign_keys=[default_location_id],
     )
+    work_orders: Mapped[list[WorkOrder]] = relationship(back_populates="material")
+    transactions: Mapped[list[Transaction]] = relationship(back_populates="material")
+    assemblies: Mapped[list[Assembly]] = relationship(
+        back_populates="material",
+        foreign_keys="Assembly.material_id",
+    )
+    component_in_assemblies: Mapped[list[AssemblyComponent]] = relationship(
+        back_populates="component_material",
+        foreign_keys="AssemblyComponent.component_material_id",
+    )
 
 
 class InventoryItem(Base):
@@ -55,6 +109,9 @@ class InventoryItem(Base):
     material: Mapped[Material] = relationship(back_populates="inventory_items")
     location: Mapped[Location] = relationship(back_populates="inventory_items")
     handling_unit_items: Mapped[list[HandlingUnitItem]] = relationship(back_populates="inventory_item")
+    reservation_links: Mapped[list[ReservationLink]] = relationship(back_populates="inventory_item")
+    transactions: Mapped[list[Transaction]] = relationship(back_populates="inventory_item")
+    maintenance_records: Mapped[list[MaintenanceRecord]] = relationship(back_populates="inventory_item")
 
 
 class Location(Base):
@@ -70,6 +127,22 @@ class Location(Base):
     default_for_materials: Mapped[list[Material]] = relationship(
         back_populates="default_location",
         foreign_keys=[Material.default_location_id],
+    )
+    transactions_from: Mapped[list[Transaction]] = relationship(
+        back_populates="from_location",
+        foreign_keys="Transaction.from_location_id",
+    )
+    transactions_to: Mapped[list[Transaction]] = relationship(
+        back_populates="to_location",
+        foreign_keys="Transaction.to_location_id",
+    )
+    putaway_lines_proposed: Mapped[list[PutawayLine]] = relationship(
+        back_populates="proposed_location",
+        foreign_keys="PutawayLine.proposed_location_id",
+    )
+    putaway_lines_adjusted: Mapped[list[PutawayLine]] = relationship(
+        back_populates="adjusted_location",
+        foreign_keys="PutawayLine.adjusted_location_id",
     )
 
 
@@ -93,6 +166,7 @@ class HandlingUnit(Base):
         back_populates="handling_unit",
         cascade="all, delete-orphan",
     )
+    transactions: Mapped[list[Transaction]] = relationship(back_populates="handling_unit")
 
 
 class HandlingUnitItem(Base):
@@ -105,3 +179,197 @@ class HandlingUnitItem(Base):
 
     handling_unit: Mapped[HandlingUnit] = relationship(back_populates="handling_unit_items")
     inventory_item: Mapped[InventoryItem] = relationship(back_populates="handling_unit_items")
+
+
+class ProjectReservation(Base):
+    __tablename__ = "project_reservations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_name: Mapped[str] = mapped_column(String, nullable=False)
+    vessel: Mapped[str] = mapped_column(String, nullable=False)
+    load_close_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    mat_close_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    start_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    expected_end_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    expected_demobilization_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    expected_return_at_boys: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    status: Mapped[str] = mapped_column(String, nullable=False)
+
+    reservation_links: Mapped[list[ReservationLink]] = relationship(
+        back_populates="project_reservation",
+        cascade="all, delete-orphan",
+    )
+
+
+class ReservationLink(Base):
+    __tablename__ = "reservation_links"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_reservation_id: Mapped[int] = mapped_column(ForeignKey("project_reservations.id"), nullable=False)
+    inventory_item_id: Mapped[int] = mapped_column(ForeignKey("inventory_items.id"), nullable=False)
+    reserved_quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_hard_reservation: Mapped[bool] = mapped_column(Boolean, default=False)
+    reserved_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    project_reservation: Mapped[ProjectReservation] = relationship(back_populates="reservation_links")
+    inventory_item: Mapped[InventoryItem] = relationship(back_populates="reservation_links")
+
+
+class WorkOrder(Base):
+    __tablename__ = "work_orders"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    work_order_number: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    material_id: Mapped[str] = mapped_column(String(100), ForeignKey("materials.material_number"), nullable=False)
+    quantity_to_build: Mapped[int] = mapped_column(Integer, nullable=False)
+    assigned_technician: Mapped[str | None] = mapped_column(String, nullable=True)
+    status: Mapped[WorkOrderStatus] = mapped_column(
+        SAEnum(WorkOrderStatus, name="work_order_status"),
+        default=WorkOrderStatus.PENDING,
+        nullable=False,
+    )
+    on_hold_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    start_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    due_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    material: Mapped[Material] = relationship(back_populates="work_orders")
+
+
+class Transaction(Base):
+    __tablename__ = "transactions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    date: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    type: Mapped[TransactionType] = mapped_column(
+        SAEnum(TransactionType, name="transaction_type"),
+        nullable=False,
+    )
+    material_id: Mapped[str] = mapped_column(String(100), ForeignKey("materials.material_number"), nullable=False)
+    inventory_item_id: Mapped[int | None] = mapped_column(ForeignKey("inventory_items.id"), nullable=True)
+    from_location_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id"), nullable=True)
+    to_location_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id"), nullable=True)
+    handling_unit_id: Mapped[int | None] = mapped_column(ForeignKey("handling_units.id"), nullable=True)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    user: Mapped[str] = mapped_column(String, nullable=False)
+    reference: Mapped[str | None] = mapped_column(String, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    material: Mapped[Material] = relationship(back_populates="transactions")
+    inventory_item: Mapped[InventoryItem | None] = relationship(back_populates="transactions")
+    from_location: Mapped[Location | None] = relationship(
+        back_populates="transactions_from",
+        foreign_keys=[from_location_id],
+    )
+    to_location: Mapped[Location | None] = relationship(
+        back_populates="transactions_to",
+        foreign_keys=[to_location_id],
+    )
+    handling_unit: Mapped[HandlingUnit | None] = relationship(back_populates="transactions")
+
+
+class Assembly(Base):
+    __tablename__ = "assemblies"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    assembly_number: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    material_id: Mapped[str] = mapped_column(String(100), ForeignKey("materials.material_number"), nullable=False)
+    description: Mapped[str] = mapped_column(String, nullable=False)
+    bom_notes: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    material: Mapped[Material] = relationship(
+        back_populates="assemblies",
+        foreign_keys=[material_id],
+    )
+    components: Mapped[list[AssemblyComponent]] = relationship(
+        back_populates="assembly",
+        cascade="all, delete-orphan",
+    )
+
+
+class AssemblyComponent(Base):
+    __tablename__ = "assembly_components"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    assembly_id: Mapped[int] = mapped_column(ForeignKey("assemblies.id"), nullable=False)
+    component_material_id: Mapped[str] = mapped_column(
+        String(100),
+        ForeignKey("materials.material_number"),
+        nullable=False,
+    )
+    quantity_required: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    assembly: Mapped[Assembly] = relationship(back_populates="components")
+    component_material: Mapped[Material] = relationship(
+        back_populates="component_in_assemblies",
+        foreign_keys=[component_material_id],
+    )
+
+
+class Receipt(Base):
+    __tablename__ = "receipts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    receipt_number: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    receipt_type: Mapped[ReceiptType] = mapped_column(
+        SAEnum(ReceiptType, name="receipt_type"),
+        nullable=False,
+    )
+    sap_po_number: Mapped[str | None] = mapped_column(String, nullable=True)
+    received_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    received_by: Mapped[str] = mapped_column(String, nullable=False)
+    reference: Mapped[str | None] = mapped_column(String, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    putaway_lines: Mapped[list[PutawayLine]] = relationship(
+        back_populates="receipt",
+        cascade="all, delete-orphan",
+    )
+
+
+class PutawayLine(Base):
+    __tablename__ = "putaway_lines"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    receipt_id: Mapped[int] = mapped_column(ForeignKey("receipts.id"), nullable=False)
+    inventory_item_id: Mapped[int] = mapped_column(ForeignKey("inventory_items.id"), nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    proposed_location_id: Mapped[int] = mapped_column(ForeignKey("locations.id"), nullable=False)
+    adjusted_location_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id"), nullable=True)
+    status: Mapped[str] = mapped_column(String, default="PENDING", nullable=False)
+    putaway_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    putaway_by: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    receipt: Mapped[Receipt] = relationship(back_populates="putaway_lines")
+    inventory_item: Mapped[InventoryItem] = relationship()
+    proposed_location: Mapped[Location] = relationship(
+        back_populates="putaway_lines_proposed",
+        foreign_keys=[proposed_location_id],
+    )
+    adjusted_location: Mapped[Location | None] = relationship(
+        back_populates="putaway_lines_adjusted",
+        foreign_keys=[adjusted_location_id],
+    )
+
+
+class MaintenanceRecord(Base):
+    __tablename__ = "maintenance_records"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    inventory_item_id: Mapped[int] = mapped_column(ForeignKey("inventory_items.id"), nullable=False)
+    type: Mapped[MaintenanceType] = mapped_column(
+        SAEnum(MaintenanceType, name="maintenance_type"),
+        nullable=False,
+    )
+    status: Mapped[MaintenanceStatus] = mapped_column(
+        SAEnum(MaintenanceStatus, name="maintenance_status"),
+        default=MaintenanceStatus.OPEN,
+        nullable=False,
+    )
+    performed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    performed_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    next_due_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    inventory_item: Mapped[InventoryItem] = relationship(back_populates="maintenance_records")
