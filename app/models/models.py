@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from enum import Enum
 
-from sqlalchemy import Boolean, Date, DateTime, Enum as SqlEnum, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, Enum as SAEnum, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -62,7 +62,7 @@ class Location(Base):
 class Material(Base):
     __tablename__ = 'materials'
 
-    material_number: Mapped[str] = mapped_column(String(100), primary_key=True)
+    material_number: Mapped[str] = mapped_column(String(100), primary_key=True, unique=True)
     description: Mapped[str] = mapped_column(String(500), nullable=False)
     category: Mapped[str] = mapped_column(String(100), nullable=False)
     is_serialized: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default='false')
@@ -156,7 +156,6 @@ class ProjectReservation(Base):
     status: Mapped[str] = mapped_column(String(100), nullable=False)
 
     reservation_links: Mapped[list[ReservationLink]] = relationship(back_populates='project_reservation')
-    work_orders: Mapped[list[WorkOrder]] = relationship(back_populates='project_reservation')
 
 
 class ReservationLink(Base):
@@ -179,11 +178,10 @@ class WorkOrder(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     work_order_number: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     material_id: Mapped[str] = mapped_column(ForeignKey('materials.material_number'), nullable=False)
-    project_reservation_id: Mapped[int | None] = mapped_column(ForeignKey('project_reservations.id'), nullable=True)
     quantity_to_build: Mapped[int] = mapped_column(Integer, nullable=False)
     assigned_technician: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[WorkOrderStatus] = mapped_column(
-        SqlEnum(WorkOrderStatus, name='work_order_status'), nullable=False, default=WorkOrderStatus.PENDING
+        SAEnum(WorkOrderStatus, name='work_order_status'), nullable=False, default=WorkOrderStatus.PENDING
     )
     on_hold_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     start_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -191,7 +189,6 @@ class WorkOrder(Base):
     completed_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     material: Mapped[Material] = relationship(back_populates='work_orders')
-    project_reservation: Mapped[ProjectReservation | None] = relationship(back_populates='work_orders')
     maintenance_records: Mapped[list[MaintenanceRecord]] = relationship(back_populates='work_order')
     assemblies: Mapped[list[Assembly]] = relationship(back_populates='work_order')
 
@@ -201,7 +198,7 @@ class Transaction(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    type: Mapped[TransactionType] = mapped_column(SqlEnum(TransactionType, name='transaction_type'), nullable=False)
+    type: Mapped[TransactionType] = mapped_column(SAEnum(TransactionType, name='transaction_type'), nullable=False)
     material_id: Mapped[str] = mapped_column(ForeignKey('materials.material_number'), nullable=False)
     inventory_item_id: Mapped[int | None] = mapped_column(ForeignKey('inventory_items.id'), nullable=True)
     from_location_id: Mapped[int | None] = mapped_column(ForeignKey('locations.id'), nullable=True)
