@@ -80,7 +80,7 @@ class HandlingUnit(Base):
     package_number: Mapped[str] = mapped_column(String(100), unique=True)
     package_type: Mapped[str] = mapped_column(String(100))
     location_id: Mapped[int] = mapped_column(ForeignKey("locations.id"))
-    parent_hu_id: Mapped[int | None] = mapped_column(ForeignKey("handling_units.id"), nullable=True)
+    parent_hu_id: Mapped[int | None] = mapped_column(ForeignKey("handling_units.id", ondelete="SET NULL"), nullable=True)
     is_bonded: Mapped[bool] = mapped_column(Boolean, default=False)
 
     location: Mapped[Location] = relationship(back_populates="handling_units")
@@ -89,7 +89,10 @@ class HandlingUnit(Base):
         remote_side=[id],
     )
     child_hus: Mapped[list[HandlingUnit]] = relationship(back_populates="parent_hu")
-    handling_unit_items: Mapped[list[HandlingUnitItem]] = relationship(back_populates="handling_unit")
+    handling_unit_items: Mapped[list[HandlingUnitItem]] = relationship(
+        back_populates="handling_unit",
+        cascade="all, delete-orphan",
+    )
 
 
 class HandlingUnitItem(Base):
