@@ -12,7 +12,10 @@ async def list_materials(
     limit: int = Query(default=100, ge=1, le=1000),
 ) -> ApiResult[list[MaterialResponse]]:
     materials = await material_repository.get_materials(skip=skip, limit=limit)
-    payload = [MaterialResponse.model_validate(material) for material in materials]
+    payload = [
+        MaterialResponse.model_validate(summary)
+        for summary in await material_repository.get_material_summaries(materials)
+    ]
     return ApiResult[list[MaterialResponse]](data=payload)
 
 
@@ -27,5 +30,15 @@ async def search_materials(
         materials = []
     if not materials:
         materials = await material_repository.search_materials_db(query=q, limit=limit)
-    payload = [MaterialResponse.model_validate(material) for material in materials]
+
+    payload = [
+        MaterialResponse.model_validate(summary)
+        for summary in await material_repository.get_material_summaries(materials)
+    ]
     return ApiResult[list[MaterialResponse]](data=payload)
+
+
+@router.post('/sync', response_model=ApiResult[int], summary='Sync materials index')
+async def sync_materials() -> ApiResult[int]:
+    indexed_documents = await material_repository.sync_to_meilisearch()
+    return ApiResult[int](data=indexed_documents)
