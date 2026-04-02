@@ -12,7 +12,7 @@ class Settings(BaseSettings):
         extra='ignore',
     )
 
-    app_name: str = 'NDT-S WMS API'
+    app_name: str = 'TitanWMS API'
     app_env: str = Field(default='development', alias='APP_ENV')
     debug: bool = Field(default=True, alias='DEBUG')
     host: str = Field(default='0.0.0.0', alias='HOST')
@@ -20,11 +20,11 @@ class Settings(BaseSettings):
     log_level: str = Field(default='INFO', alias='LOG_LEVEL')
 
     database_url: str = Field(
-        default='postgresql+asyncpg://ndts:ndts@pgbouncer:5432/ndts_wms',
+        default='postgresql+asyncpg://titanwms:titanwms@pgbouncer:5432/titanwms',
         alias='DATABASE_URL',
     )
     sync_database_url: str = Field(
-        default='postgresql://ndts:ndts@pgbouncer:5432/ndts_wms',
+        default='postgresql://titanwms:titanwms@pgbouncer:5432/titanwms',
         alias='SYNC_DATABASE_URL',
     )
     redis_url: str = Field(default='redis://redis:6379/0', alias='REDIS_URL')

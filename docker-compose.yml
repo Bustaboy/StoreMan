@@ -1,7 +1,9 @@
+name: titanwms
+
 services:
   api:
     build: .
-    container_name: ndts_api
+    container_name: titanwms_api
     env_file:
       - .env
     ports:
@@ -21,7 +23,7 @@ services:
 
   worker:
     build: .
-    container_name: ndts_worker
+    container_name: titanwms_worker
     env_file:
       - .env
     depends_on:
@@ -35,7 +37,7 @@ services:
 
   db:
     image: postgres:16
-    container_name: ndts_db
+    container_name: titanwms_db
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
@@ -48,7 +50,7 @@ services:
 
   pgbouncer:
     image: edoburu/pgbouncer:latest
-    container_name: ndts_pgbouncer
+    container_name: titanwms_pgbouncer
     restart: unless-stopped
     environment:
       DB_USER: ${POSTGRES_USER}
@@ -71,14 +73,14 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: ndts_redis
+    container_name: titanwms_redis
     restart: unless-stopped
     ports:
       - '6379:6379'
 
   meilisearch:
     image: getmeili/meilisearch:v1.10
-    container_name: ndts_meilisearch
+    container_name: titanwms_meilisearch
     restart: unless-stopped
     environment:
       MEILI_MASTER_KEY: ${MEILISEARCH_MASTER_KEY}

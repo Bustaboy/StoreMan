@@ -1,6 +1,6 @@
-# NDT-S WMS Backend (Skeleton)
+# TitanWMS Backend (Skeleton)
 
-Initial backend skeleton for a fully local Warehouse Management System built with FastAPI.
+Initial backend skeleton for TitanWMS, a fully local Warehouse Management System built with FastAPI.
 
 ## Stack
 - FastAPI
