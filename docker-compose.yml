@@ -1,0 +1,95 @@
+name: titanwms
+
+services:
+  api:
+    build: .
+    container_name: titanwms_api
+    env_file:
+      - .env
+    ports:
+      - '8000:8000'
+    depends_on:
+      db:
+        condition: service_started
+      redis:
+        condition: service_started
+      meilisearch:
+        condition: service_started
+      pgbouncer:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - .:/app
+
+  worker:
+    build: .
+    container_name: titanwms_worker
+    env_file:
+      - .env
+    depends_on:
+      redis:
+        condition: service_started
+      pgbouncer:
+        condition: service_healthy
+    command: celery -A app.celery_app.celery_app worker --loglevel=info
+    volumes:
+      - .:/app
+
+  db:
+    image: postgres:16
+    container_name: titanwms_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: titanwms_pgbouncer
+    restart: unless-stopped
+    environment:
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_HOST: db
+      DB_NAME: ${POSTGRES_DB}
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 200
+      DEFAULT_POOL_SIZE: 20
+      AUTH_TYPE: md5
+    ports:
+      - '6432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'nc -z 127.0.0.1 5432']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    depends_on:
+      - db
+
+  redis:
+    image: redis:7-alpine
+    container_name: titanwms_redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.10
+    container_name: titanwms_meilisearch
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${MEILISEARCH_MASTER_KEY}
+      MEILI_ENV: development
+    ports:
+      - '7700:7700'
+    volumes:
+      - meili_data:/meili_data
+
+volumes:
+  postgres_data:
+  meili_data:
