@@ -2,23 +2,23 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
-from enum import Enum
+from enum import Enum as PyEnum
 from typing import List, Optional
 
 from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
-    Enum,
+    Enum as SAEnum,
     ForeignKey,
     Integer,
-    JSON,
     Numeric,
     String,
     Text,
     UniqueConstraint,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -26,7 +26,7 @@ class Base(DeclarativeBase):
     pass
 
 
-class TransactionType(str, Enum):
+class TransactionType(str, PyEnum):
     RECEIVE = 'RECEIVE'
     ISSUE = 'ISSUE'
     TRANSFER = 'TRANSFER'
@@ -37,7 +37,7 @@ class TransactionType(str, Enum):
     PUTAWAY = 'PUTAWAY'
 
 
-class WorkOrderStatus(str, Enum):
+class WorkOrderStatus(str, PyEnum):
     DRAFT = 'DRAFT'
     RELEASED = 'RELEASED'
     IN_PROGRESS = 'IN_PROGRESS'
@@ -121,7 +121,7 @@ class InventoryItem(Base):
     batch_number: Mapped[Optional[str]] = mapped_column(String(128), index=True)
     quantity: Mapped[Decimal] = mapped_column(Numeric(14, 4), default=1, nullable=False)
     revision: Mapped[Optional[str]] = mapped_column(String(64))
-    project_specific_bom_notes: Mapped[Optional[dict]] = mapped_column(JSON)
+    project_specific_bom_notes: Mapped[Optional[dict]] = mapped_column(JSONB)
     is_assembly_instance: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -240,7 +240,7 @@ class WorkOrder(Base):
     quantity_to_build: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
     assigned_technician: Mapped[Optional[str]] = mapped_column(String(255))
     status: Mapped[WorkOrderStatus] = mapped_column(
-        Enum(WorkOrderStatus, name='work_order_status'), default=WorkOrderStatus.DRAFT, nullable=False
+        SAEnum(WorkOrderStatus, name='work_order_status'), default=WorkOrderStatus.DRAFT, nullable=False
     )
     on_hold_reason: Mapped[Optional[str]] = mapped_column(Text)
 
@@ -265,7 +265,7 @@ class Transaction(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     transaction_type: Mapped[TransactionType] = mapped_column(
-        Enum(TransactionType, name='transaction_type'), nullable=False, index=True
+        SAEnum(TransactionType, name='transaction_type'), nullable=False, index=True
     )
 
     material_id: Mapped[int] = mapped_column(ForeignKey('materials.id', ondelete='RESTRICT'), index=True)
