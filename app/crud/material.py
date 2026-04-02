@@ -71,20 +71,22 @@ class MaterialRepository:
         async with self.session_factory() as session:
             return list((await session.scalars(stmt)).all())
 
-    async def sync_materials_to_meilisearch(self) -> int:
+    async def sync_to_meilisearch(self) -> int:
         async with self.session_factory() as session:
             materials = list((await session.scalars(select(Material))).all())
 
-        documents = [
-            {
-                'id': material.material_number,
-                'material_number': material.material_number,
-                'description': material.description,
-                'category': material.category,
-                'sap_material_number': material.sap_material_number,
-            }
-            for material in materials
-        ]
+        documents = []
+        for material in materials:
+            documents.append(
+                {
+                    'id': material.material_number,
+                    'material_number': material.material_number,
+                    'description': material.description,
+                    'category': material.category,
+                    'sap_material_number': material.sap_material_number,
+                }
+            )
+
         self.meili_client.index('materials').add_documents(documents, primary_key='id')
         return len(documents)
 

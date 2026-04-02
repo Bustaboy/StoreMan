@@ -29,3 +29,9 @@ async def search_materials(
         materials = await material_repository.search_materials_db(query=q, limit=limit)
     payload = [MaterialResponse.model_validate(material) for material in materials]
     return ApiResult[list[MaterialResponse]](data=payload)
+
+
+@router.post('/sync', response_model=ApiResult[dict[str, int]], summary='Sync materials to Meilisearch')
+async def sync_materials() -> ApiResult[dict[str, int]]:
+    indexed = await material_repository.sync_to_meilisearch()
+    return ApiResult[dict[str, int]](data={'indexed': indexed})
