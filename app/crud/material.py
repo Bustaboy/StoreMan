@@ -105,7 +105,13 @@ class MaterialRepository:
             }
             for row in rows
         ]
-        self.meili_client.index('materials').add_documents(documents, primary_key='id')
+        materials_index = self.meili_client.index('materials')
+        settings_task = materials_index.update_searchable_attributes(
+            ['material_number', 'description', 'category', 'sap_material_number', 'location']
+        )
+        self.meili_client.wait_for_task(settings_task.task_uid)
+        task = materials_index.add_documents(documents, primary_key='id')
+        self.meili_client.wait_for_task(task.task_uid)
         return len(documents)
 
     async def get_material_summaries(self, materials: list[Material]) -> list[dict[str, object]]:
