@@ -14,7 +14,7 @@ class Base(DeclarativeBase):
 class Material(Base):
     __tablename__ = "materials"
 
-    material_number: Mapped[str] = mapped_column(String, primary_key=True, unique=True)
+    material_number: Mapped[str] = mapped_column(String(100), primary_key=True, unique=True)
     description: Mapped[str] = mapped_column(String, nullable=False)
     category: Mapped[str] = mapped_column(String, nullable=False)
     is_serialized: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -41,7 +41,7 @@ class InventoryItem(Base):
     __tablename__ = "inventory_items"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    material_id: Mapped[str] = mapped_column(ForeignKey("materials.material_number"))
+    material_id: Mapped[str] = mapped_column(String(100), ForeignKey("materials.material_number"))
     serial_number: Mapped[str | None] = mapped_column(String, nullable=True)
     batch_number: Mapped[str | None] = mapped_column(String, nullable=True)
     expiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -67,5 +67,5 @@ class Location(Base):
     inventory_items: Mapped[list[InventoryItem]] = relationship(back_populates="location")
     default_for_materials: Mapped[list[Material]] = relationship(
         back_populates="default_location",
-        foreign_keys="Material.default_location_id",
+        foreign_keys=[Material.default_location_id],
     )
