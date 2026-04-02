@@ -24,6 +24,22 @@ API docs:
 Health check:
 - `GET http://localhost:8000/health`
 
+## Database Migrations (Alembic)
+
+Run migrations from the API container to ensure environment variables and network aliases match Docker Compose:
+
+```bash
+docker compose run --rm api alembic revision --autogenerate -m "initial schema"
+docker compose run --rm api alembic upgrade head
+```
+
+Check current migration state:
+
+```bash
+docker compose run --rm api alembic current
+docker compose run --rm api alembic history
+```
+
 ## Project Structure
 
 ```text
