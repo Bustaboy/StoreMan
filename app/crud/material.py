@@ -18,51 +18,56 @@ class MaterialRepository:
             self.settings.meilisearch_master_key,
         )
 
-    async def list_materials(self, limit: int = 100, offset: int = 0) -> list[Material]:
-        stmt = (
+    async def list_materials(self, limit: int = 100, offset: int = 0) -> tuple[list[Material], int]:
+        clean_limit = max(limit, 1)
+        clean_offset = max(offset, 0)
+
+        items_stmt = (
             select(Material)
             .order_by(Material.material_number)
-            .limit(max(limit, 1))
-            .offset(max(offset, 0))
+            .limit(clean_limit)
+            .offset(clean_offset)
         )
+        total_stmt = select(func.count()).select_from(Material)
+
         async with self.session_factory() as session:
-            result = await session.scalars(stmt)
-            return list(result.all())
+            items = list((await session.scalars(items_stmt)).all())
+            total = int((await session.scalar(total_stmt)) or 0)
 
-    async def search_materials(self, query: str, limit: int = 25) -> list[Material]:
+        return items, total
+
+    async def search_materials(self, query: str, limit: int = 25, offset: int = 0) -> list[Material]:
+        clean_limit = max(limit, 1)
+        clean_offset = max(offset, 0)
+
         try:
-            materials = await self._search_with_meilisearch(query=query, limit=limit)
-            if materials:
-                return materials
+            return await self._search_with_meilisearch(query=query, limit=clean_limit, offset=clean_offset)
         except Exception:
-            pass
+            return await self._search_with_postgres(query=query, limit=clean_limit, offset=clean_offset)
 
-        return await self._search_with_postgres(query=query, limit=limit)
-
-    async def _search_with_meilisearch(self, query: str, limit: int) -> list[Material]:
+    async def _search_with_meilisearch(self, query: str, limit: int, offset: int) -> list[Material]:
         search_result = self.meili_client.index('materials').search(
             query,
-            {'limit': max(limit, 1)},
+            {'limit': limit, 'offset': offset},
         )
-        hits = search_result.get('hits', [])
-        material_numbers: list[str] = []
-        for hit in hits:
-            material_number = hit.get('material_number') or hit.get('id')
-            if material_number:
-                material_numbers.append(str(material_number))
 
+        hits = search_result.get('hits', [])
+        material_numbers = [
+            str(hit.get('material_number') or hit.get('id'))
+            for hit in hits
+            if hit.get('material_number') or hit.get('id')
+        ]
         if not material_numbers:
             return []
 
-        order = {material_number: i for i, material_number in enumerate(material_numbers)}
+        order = {material_number: index for index, material_number in enumerate(material_numbers)}
         stmt = select(Material).where(Material.material_number.in_(material_numbers))
         async with self.session_factory() as session:
-            result = await session.scalars(stmt)
-            materials = list(result.all())
+            materials = list((await session.scalars(stmt)).all())
 
         return sorted(materials, key=lambda material: order.get(material.material_number, len(order)))
 
-    async def _search_with_postgres(self, query: str, limit: int) -> list[Material]:
+    async def _search_with_postgres(self, query: str, limit: int, offset: int) -> list[Material]:
         vector = func.to_tsvector(
             'simple',
             func.concat_ws(' ', Material.material_number, Material.description, Material.category),
@@ -73,12 +78,12 @@ class MaterialRepository:
             select(Material)
             .where(vector.op('@@')(ts_query))
             .order_by(func.ts_rank(vector, ts_query).desc(), Material.material_number.asc())
-            .limit(max(limit, 1))
+            .limit(limit)
+            .offset(offset)
         )
 
         async with self.session_factory() as session:
-            result = await session.scalars(stmt)
-            return list(result.all())
+            return list((await session.scalars(stmt)).all())
 
 
 material_repository = MaterialRepository()

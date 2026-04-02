@@ -1,3 +1,3 @@
-from app.schemas.material import MaterialRead
+from app.schemas.material import ApiResult, MaterialRead, MaterialsPage
 
-__all__ = ['MaterialRead']
+__all__ = ['ApiResult', 'MaterialRead', 'MaterialsPage']
