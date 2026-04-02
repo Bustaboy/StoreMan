@@ -1,15 +1,6 @@
 from __future__ import annotations
 
-from typing import Generic, TypeVar
-
-from pydantic import BaseModel, ConfigDict
-
-T = TypeVar('T')
-
-
-class ApiResult(BaseModel, Generic[T]):
-    ok: bool = True
-    data: T
+from pydantic import BaseModel, ConfigDict, computed_field
 
 
 class MaterialResponse(BaseModel):
@@ -17,7 +8,23 @@ class MaterialResponse(BaseModel):
 
     material_number: str
     description: str
-    category: str
+    category: str | None
     quantity: int
     location: str | None
     sap_material_number: str | None
+    is_serialized: bool
+
+    @computed_field
+    @property
+    def code(self) -> str:
+        return self.material_number
+
+    @computed_field
+    @property
+    def name(self) -> str:
+        return self.description
+
+    @computed_field
+    @property
+    def quantity_on_hand(self) -> int:
+        return self.quantity
