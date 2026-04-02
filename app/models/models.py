@@ -54,6 +54,7 @@ class InventoryItem(Base):
 
     material: Mapped[Material] = relationship(back_populates="inventory_items")
     location: Mapped[Location] = relationship(back_populates="inventory_items")
+    handling_unit_items: Mapped[list[HandlingUnitItem]] = relationship(back_populates="inventory_item")
 
 
 class Location(Base):
@@ -65,7 +66,39 @@ class Location(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     inventory_items: Mapped[list[InventoryItem]] = relationship(back_populates="location")
+    handling_units: Mapped[list[HandlingUnit]] = relationship(back_populates="location")
     default_for_materials: Mapped[list[Material]] = relationship(
         back_populates="default_location",
         foreign_keys=[Material.default_location_id],
     )
+
+
+class HandlingUnit(Base):
+    __tablename__ = "handling_units"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    package_number: Mapped[str] = mapped_column(String(100), unique=True)
+    package_type: Mapped[str] = mapped_column(String(100))
+    location_id: Mapped[int] = mapped_column(ForeignKey("locations.id"))
+    parent_hu_id: Mapped[int | None] = mapped_column(ForeignKey("handling_units.id"), nullable=True)
+    is_bonded: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    location: Mapped[Location] = relationship(back_populates="handling_units")
+    parent_hu: Mapped[HandlingUnit | None] = relationship(
+        back_populates="child_hus",
+        remote_side=[id],
+    )
+    child_hus: Mapped[list[HandlingUnit]] = relationship(back_populates="parent_hu")
+    handling_unit_items: Mapped[list[HandlingUnitItem]] = relationship(back_populates="handling_unit")
+
+
+class HandlingUnitItem(Base):
+    __tablename__ = "handling_unit_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    handling_unit_id: Mapped[int] = mapped_column(ForeignKey("handling_units.id"))
+    inventory_item_id: Mapped[int] = mapped_column(ForeignKey("inventory_items.id"))
+    quantity_in_hu: Mapped[int] = mapped_column(Integer, default=1)
+
+    handling_unit: Mapped[HandlingUnit] = relationship(back_populates="handling_unit_items")
+    inventory_item: Mapped[InventoryItem] = relationship(back_populates="handling_unit_items")
