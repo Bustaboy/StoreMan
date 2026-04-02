@@ -13,11 +13,11 @@ class Base(DeclarativeBase):
 
 
 class WorkOrderStatus(str, Enum):
-    PENDING = "Pending"
-    IN_PROGRESS = "In Progress"
-    ON_HOLD = "On Hold"
-    COMPLETED = "Completed"
-    CANCELLED = "Cancelled"
+    PENDING = "PENDING"
+    IN_PROGRESS = "IN_PROGRESS"
+    ON_HOLD = "ON_HOLD"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
 
 
 class TransactionType(str, Enum):
@@ -280,7 +280,7 @@ class Assembly(Base):
     material_id: Mapped[str] = mapped_column(String(100), ForeignKey("materials.material_number"), nullable=False)
     description: Mapped[str] = mapped_column(String(255), nullable=False)
     bom_notes: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), nullable=False)
 
     material: Mapped[Material] = relationship(
         back_populates="assemblies",
@@ -321,7 +321,7 @@ class Receipt(Base):
         nullable=False,
     )
     sap_po_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    received_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    received_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), nullable=False)
     received_by: Mapped[str] = mapped_column(String(100), nullable=False)
     reference: Mapped[str | None] = mapped_column(String(100), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
