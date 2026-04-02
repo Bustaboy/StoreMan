@@ -2,23 +2,38 @@
   import Sidebar from '$lib/components/layout/sidebar.svelte';
   import ThemeToggle from '$lib/components/ui/theme-toggle.svelte';
   import { healthCheck } from '$lib/api';
+  import { currentPage, navItems, type PageId } from '$lib/stores/navigation';
 
   let backendStatus = $state<'checking' | 'online' | 'offline'>('checking');
   let backendMessage = $state('Checking backend connection...');
 
+  const pageDescriptions: Record<PageId, string> = {
+    dashboard: 'NDT warehouse operations at a glance',
+    inventory: 'Track stock levels and item movements',
+    'work-orders': 'Manage order queue and assignment',
+    planning: 'Plan inbound and outbound logistics',
+    mobilization: 'Coordinate field mobilization readiness'
+  };
+
   $effect(() => {
     void (async () => {
-      try {
-        const result = await healthCheck();
+      backendStatus = 'checking';
+      backendMessage = 'Checking backend connection...';
+
+      const result = await healthCheck();
+
+      if (result.ok) {
         backendStatus = 'online';
-        backendMessage = result.status ?? 'Backend is reachable';
-      } catch (error) {
-        backendStatus = 'offline';
-        backendMessage =
-          error instanceof Error ? error.message : 'Unable to connect to backend at http://localhost:8000';
+        backendMessage = result.data?.status ?? 'Backend is reachable';
+        return;
       }
+
+      backendStatus = 'offline';
+      backendMessage = result.error ?? 'Unable to connect to backend at http://localhost:8000';
     })();
   });
+
+  const activePage = $derived.by(() => navItems.find((item) => item.id === $currentPage) ?? navItems[0]);
 </script>
 
 <div class="flex h-full">
@@ -27,8 +42,8 @@
   <main class="flex-1 p-6">
     <div class="mb-8 flex items-center justify-between">
       <div>
-        <h2 class="text-2xl font-semibold">Dashboard</h2>
-        <p class="text-sm text-muted-foreground">NDT warehouse operations at a glance</p>
+        <h2 class="text-2xl font-semibold">{activePage.label}</h2>
+        <p class="text-sm text-muted-foreground">{pageDescriptions[activePage.id]}</p>
       </div>
       <ThemeToggle />
     </div>
@@ -41,9 +56,9 @@
             ? 'bg-green-500'
             : backendStatus === 'offline'
               ? 'bg-red-500'
-              : 'bg-yellow-500'}"
+              : 'bg-yellow-500 animate-pulse'}"
         ></span>
-        {backendMessage}
+        {backendStatus === 'checking' ? 'Loading backend status…' : backendMessage}
       </p>
     </section>
   </main>
