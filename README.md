@@ -38,6 +38,27 @@ app/
   utils/
 ```
 
+
+## Database Migrations
+
+Generate the initial migration after model changes:
+
+```bash
+docker compose run --rm api alembic revision --autogenerate -m "initial schema"
+```
+
+Apply migrations:
+
+```bash
+docker compose run --rm api alembic upgrade head
+```
+
+Check migration state:
+
+```bash
+docker compose run --rm api alembic current
+```
+
 ## Notes
-- This is skeleton only: no domain models, migrations, or business logic are implemented yet.
+- Domain models and Alembic environment are scaffolded for local development.
 - Use `.env` for local configuration.
