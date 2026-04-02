@@ -1,6 +1,7 @@
 <script lang="ts">
   import Sidebar from '$lib/components/layout/sidebar.svelte';
   import ThemeToggle from '$lib/components/ui/theme-toggle.svelte';
+  import Inventory from '$lib/pages/Inventory.svelte';
   import { healthCheck } from '$lib/api';
   import { currentPage, navItems, type PageId } from '$lib/stores/navigation';
 
@@ -48,18 +49,22 @@
       <ThemeToggle />
     </div>
 
-    <section class="rounded-lg border border-border bg-background p-4 shadow-sm">
-      <h3 class="mb-2 text-sm font-medium">Backend Health</h3>
-      <p class="text-sm">
-        <span
-          class="mr-2 inline-flex h-2.5 w-2.5 rounded-full {backendStatus === 'online'
-            ? 'bg-green-500'
-            : backendStatus === 'offline'
-              ? 'bg-red-500'
-              : 'bg-yellow-500 animate-pulse'}"
-        ></span>
-        {backendStatus === 'checking' ? 'Loading backend status…' : backendMessage}
-      </p>
-    </section>
+    {#if activePage.id === 'inventory'}
+      <Inventory />
+    {:else}
+      <section class="rounded-lg border border-border bg-background p-4 shadow-sm">
+        <h3 class="mb-2 text-sm font-medium">Backend Health</h3>
+        <p class="text-sm">
+          <span
+            class="mr-2 inline-flex h-2.5 w-2.5 rounded-full {backendStatus === 'online'
+              ? 'bg-green-500'
+              : backendStatus === 'offline'
+                ? 'bg-red-500'
+                : 'bg-yellow-500 animate-pulse'}"
+          ></span>
+          {backendStatus === 'checking' ? 'Loading backend status…' : backendMessage}
+        </p>
+      </section>
+    {/if}
   </main>
 </div>
