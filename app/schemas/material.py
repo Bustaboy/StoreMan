@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class MaterialResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra='ignore', str_strip_whitespace=True)
 
     id: str = ''
     code: str = ''
