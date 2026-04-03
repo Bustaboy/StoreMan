@@ -153,11 +153,7 @@ class MaterialRepository:
 
         stmt = (
             select(
-                Material.material_number,
-                Material.description,
-                Material.category,
-                Material.sap_material_number,
-                Material.is_serialized,
+                Material,
                 func.coalesce(quantity_subquery.c.quantity, 0).label('quantity'),
                 Location.name.label('location'),
             )
@@ -169,23 +165,49 @@ class MaterialRepository:
         async with self.session_factory() as session:
             rows = (await session.execute(stmt)).all()
 
-        documents = [
-            {
-                'id': self._normalize_string(row.material_number),
-                'material_number': self._normalize_string(row.material_number),
-                'description': self._normalize_string(row.description),
-                'category': self._normalize_string(row.category),
-                'quantity': int(row.quantity or 0),
-                'location': self._normalize_optional_string(row.location),
-                'sap_material_number': self._normalize_optional_string(row.sap_material_number),
-                'is_serialized': bool(row.is_serialized),
-            }
-            for row in rows
-        ]
+        documents = []
+        for material, quantity, location in rows:
+            normalized_material_number = self._normalize_string(material.material_number)
+            normalized_description = self._normalize_string(material.description)
+            normalized_quantity = int(quantity or 0)
+
+            documents.append(
+                {
+                    'id': normalized_material_number,
+                    'code': normalized_material_number,
+                    'name': normalized_description,
+                    'category': self._normalize_optional_string(material.category),
+                    'quantity_on_hand': normalized_quantity,
+                    'location': self._normalize_optional_string(location),
+                    'material_number': normalized_material_number,
+                    'description': normalized_description,
+                    'sap_material_number': self._normalize_optional_string(material.sap_material_number),
+                    'is_serialized': bool(material.is_serialized),
+                    'quantity': normalized_quantity,
+                }
+            )
 
         materials_index = self.meili_client.index('materials')
 
         try:
+            clear_existing_documents = False
+
+            try:
+                primary_key = materials_index.get_primary_key()
+            except Exception:
+                create_task = self.meili_client.create_index('materials', {'primaryKey': 'id'})
+                self._wait_for_meili_task(self.meili_client, create_task)
+                primary_key = 'id'
+
+            if primary_key != 'id':
+                clear_task = materials_index.delete_all_documents()
+                self._wait_for_meili_task(self.meili_client, clear_task)
+
+                primary_key_task = materials_index.update(primary_key='id')
+                self._wait_for_meili_task(self.meili_client, primary_key_task)
+            else:
+                clear_existing_documents = True
+
             settings_task = materials_index.update_searchable_attributes(
                 [
                     'material_number',
@@ -196,6 +218,10 @@ class MaterialRepository:
                 ]
             )
             self._wait_for_meili_task(self.meili_client, settings_task)
+
+            if clear_existing_documents:
+                clear_task = materials_index.delete_all_documents()
+                self._wait_for_meili_task(self.meili_client, clear_task)
 
             for start in range(0, len(documents), MEILISEARCH_BATCH_SIZE):
                 batch = documents[start:start + MEILISEARCH_BATCH_SIZE]
