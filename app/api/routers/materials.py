@@ -7,14 +7,21 @@ from app.schemas.material import MaterialResponse
 router = APIRouter(tags=['materials'])
 
 
+def _normalize_optional_string(value: object) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None
+
+
 def _to_material_response(material: Material) -> MaterialResponse:
     material_number = str(getattr(material, 'material_number', '') or '')
-    description = getattr(material, 'description', None) or ''
+    description = str(getattr(material, 'description', '') or '')
     quantity_on_hand = int(getattr(material, 'quantity', 0) or 0)
-    location = getattr(material, 'location', None)
+    location = _normalize_optional_string(getattr(material, 'location', None))
     if location is None:
         default_location = getattr(material, 'default_location', None)
-        location = default_location.name if default_location else None
+        location = _normalize_optional_string(default_location.name if default_location else None)
 
     return MaterialResponse(
         id=material_number,
@@ -24,8 +31,8 @@ def _to_material_response(material: Material) -> MaterialResponse:
         location=location,
         material_number=material_number,
         description=description,
-        category=getattr(material, 'category', None),
-        sap_material_number=getattr(material, 'sap_material_number', None),
+        category=_normalize_optional_string(getattr(material, 'category', None)),
+        sap_material_number=_normalize_optional_string(getattr(material, 'sap_material_number', None)),
         is_serialized=bool(getattr(material, 'is_serialized', False)),
     )
 
