@@ -15,4 +15,14 @@ async def list_materials(
 ) -> list[MaterialResponse]:
     repository = MaterialRepository(session)
     materials = await repository.get_materials(skip=skip, limit=limit)
-    return [MaterialResponse.model_validate(material) for material in materials]
+    return [
+        MaterialResponse(
+            material_number=material.material_number,
+            description=material.description,
+            category=material.category,
+            quantity=int(getattr(material, 'quantity', 0)),
+            location=getattr(material, 'location', None),
+            updated_at=getattr(material, 'updated_at', None),
+        )
+        for material in materials
+    ]

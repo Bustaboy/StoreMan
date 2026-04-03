@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -9,7 +11,6 @@ class MaterialResponse(BaseModel):
     material_number: str
     description: str
     category: str | None = None
-    quantity: int | None = None
+    quantity: int = 0
     location: str | None = None
-    sap_material_number: str | None = None
-    is_serialized: bool | None = None
+    updated_at: datetime | None = None
