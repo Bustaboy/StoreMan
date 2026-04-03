@@ -18,6 +18,48 @@ class MaterialRepository:
         self.session_factory = async_sessionmaker(self.engine, class_=AsyncSession, expire_on_commit=False)
         self.meili_client = meilisearch.Client(settings.meilisearch_url, settings.meilisearch_master_key)
 
+    @staticmethod
+    def _normalize_string(value: object) -> str:
+        return str(value or '')
+
+    @staticmethod
+    def _normalize_optional_string(value: object) -> str | None:
+        if value is None:
+            return None
+        normalized = str(value).strip()
+        return normalized or None
+
+    @staticmethod
+    def _get_meili_task_uid(task: object) -> object:
+        if isinstance(task, dict):
+            return task.get('taskUid') or task.get('task_uid') or task.get('uid')
+        return (
+            getattr(task, 'task_uid', None)
+            or getattr(task, 'taskUid', None)
+            or getattr(task, 'uid', None)
+        )
+
+    @classmethod
+    def _wait_for_meili_task(cls, client: meilisearch.Client, task: object) -> None:
+        task_uid = cls._get_meili_task_uid(task)
+        if task_uid is None:
+            raise RuntimeError('Missing Meilisearch task identifier')
+        client.wait_for_task(task_uid)
+
+    @staticmethod
+    def _extract_meili_hits(search_result: object) -> list[object]:
+        if isinstance(search_result, dict):
+            hits = search_result.get('hits', [])
+        else:
+            hits = getattr(search_result, 'hits', [])
+        return hits if isinstance(hits, list) else []
+
+    @staticmethod
+    def _extract_hit_value(hit: object, field_name: str) -> object:
+        if isinstance(hit, dict):
+            return hit.get(field_name)
+        return getattr(hit, field_name, None)
+
     async def get_materials(self, skip: int = 0, limit: int = 100) -> list[Material]:
         clean_skip = max(skip, 0)
         clean_limit = max(limit, 1)
@@ -57,14 +99,14 @@ class MaterialRepository:
             return []
 
         search_result = self.meili_client.index('materials').search(clean_query, {'limit': clean_limit})
-        hits = search_result.get('hits', []) if isinstance(search_result, dict) else getattr(search_result, 'hits', [])
+        hits = self._extract_meili_hits(search_result)
         material_numbers: list[str] = []
         for hit in hits:
-            material_number = hit.get('material_number') or hit.get('id')
-            if not material_number:
+            material_number = self._extract_hit_value(hit, 'material_number') or self._extract_hit_value(hit, 'id')
+            normalized_material_number = self._normalize_optional_string(material_number)
+            if normalized_material_number is None:
                 continue
 
-            normalized_material_number = str(material_number)
             if normalized_material_number not in material_numbers:
                 material_numbers.append(normalized_material_number)
 
@@ -129,13 +171,13 @@ class MaterialRepository:
 
         documents = [
             {
-                'id': row.material_number,
-                'material_number': row.material_number,
-                'description': row.description,
-                'category': row.category,
+                'id': self._normalize_string(row.material_number),
+                'material_number': self._normalize_string(row.material_number),
+                'description': self._normalize_string(row.description),
+                'category': self._normalize_string(row.category),
                 'quantity': int(row.quantity or 0),
-                'location': row.location,
-                'sap_material_number': row.sap_material_number,
+                'location': self._normalize_optional_string(row.location),
+                'sap_material_number': self._normalize_optional_string(row.sap_material_number),
                 'is_serialized': bool(row.is_serialized),
             }
             for row in rows
@@ -153,7 +195,7 @@ class MaterialRepository:
                     'location',
                 ]
             )
-            self.meili_client.wait_for_task(settings_task.task_uid)
+            self._wait_for_meili_task(self.meili_client, settings_task)
 
             for start in range(0, len(documents), MEILISEARCH_BATCH_SIZE):
                 batch = documents[start:start + MEILISEARCH_BATCH_SIZE]
@@ -161,7 +203,7 @@ class MaterialRepository:
                     continue
 
                 task = materials_index.add_documents(batch, primary_key='id')
-                self.meili_client.wait_for_task(task.task_uid)
+                self._wait_for_meili_task(self.meili_client, task)
         except Exception as exc:
             raise RuntimeError('Failed to sync materials to Meilisearch') from exc
 
