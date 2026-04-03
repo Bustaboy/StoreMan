@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import meilisearch
+from meilisearch.errors import MeilisearchApiError
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -87,7 +88,9 @@ class MaterialRepository:
 
         materials: list[Material] = []
         for material, quantity in rows:
-            setattr(material, 'quantity', int(quantity or 0))
+            normalized_quantity = int(quantity or 0)
+            setattr(material, 'quantity', normalized_quantity)
+            setattr(material, 'quantity_on_hand', normalized_quantity)
             setattr(material, 'location', material.default_location.name if material.default_location else None)
             materials.append(material)
         return materials
@@ -136,7 +139,9 @@ class MaterialRepository:
 
         materials: list[Material] = []
         for material, quantity in rows:
-            setattr(material, 'quantity', int(quantity or 0))
+            normalized_quantity = int(quantity or 0)
+            setattr(material, 'quantity', normalized_quantity)
+            setattr(material, 'quantity_on_hand', normalized_quantity)
             setattr(material, 'location', material.default_location.name if material.default_location else None)
             materials.append(material)
         return sorted(materials, key=lambda material: order.get(material.material_number, len(order)))
@@ -153,9 +158,13 @@ class MaterialRepository:
 
         stmt = (
             select(
-                Material,
-                func.coalesce(quantity_subquery.c.quantity, 0).label('quantity'),
+                Material.material_number.label('material_number'),
+                Material.description.label('description'),
+                Material.category.label('category'),
+                func.coalesce(quantity_subquery.c.quantity, 0).label('quantity_on_hand'),
                 Location.name.label('location'),
+                Material.sap_material_number.label('sap_material_number'),
+                Material.is_serialized.label('is_serialized'),
             )
             .outerjoin(quantity_subquery, quantity_subquery.c.material_number == Material.material_number)
             .outerjoin(Location, Location.id == Material.default_location_id)
@@ -166,47 +175,45 @@ class MaterialRepository:
             rows = (await session.execute(stmt)).all()
 
         documents = []
-        for material, quantity, location in rows:
-            normalized_material_number = self._normalize_string(material.material_number)
-            normalized_description = self._normalize_string(material.description)
-            normalized_quantity = int(quantity or 0)
+        for row in rows:
+            normalized_material_number = self._normalize_string(row.material_number)
+            normalized_description = self._normalize_string(row.description)
+            normalized_quantity_on_hand = int(row.quantity_on_hand or 0)
 
             documents.append(
                 {
                     'id': normalized_material_number,
                     'code': normalized_material_number,
                     'name': normalized_description,
-                    'category': self._normalize_optional_string(material.category),
-                    'quantity_on_hand': normalized_quantity,
-                    'location': self._normalize_optional_string(location),
+                    'category': self._normalize_optional_string(row.category),
+                    'quantity_on_hand': normalized_quantity_on_hand,
+                    'location': self._normalize_optional_string(row.location),
                     'material_number': normalized_material_number,
                     'description': normalized_description,
-                    'sap_material_number': self._normalize_optional_string(material.sap_material_number),
-                    'is_serialized': bool(material.is_serialized),
-                    'quantity': normalized_quantity,
+                    'sap_material_number': self._normalize_optional_string(row.sap_material_number),
+                    'is_serialized': bool(row.is_serialized),
                 }
             )
 
         materials_index = self.meili_client.index('materials')
 
         try:
-            clear_existing_documents = False
-
             try:
                 primary_key = materials_index.get_primary_key()
-            except Exception:
+            except MeilisearchApiError as exc:
+                if exc.code != 'index_not_found':
+                    raise
                 create_task = self.meili_client.create_index('materials', {'primaryKey': 'id'})
                 self._wait_for_meili_task(self.meili_client, create_task)
                 primary_key = 'id'
 
-            if primary_key != 'id':
-                clear_task = materials_index.delete_all_documents()
-                self._wait_for_meili_task(self.meili_client, clear_task)
-
+            if primary_key is None:
                 primary_key_task = materials_index.update(primary_key='id')
                 self._wait_for_meili_task(self.meili_client, primary_key_task)
-            else:
-                clear_existing_documents = True
+                primary_key = 'id'
+
+            if primary_key != 'id':
+                raise RuntimeError('Meilisearch materials index must use "id" as the primary key')
 
             settings_task = materials_index.update_searchable_attributes(
                 [
@@ -219,9 +226,8 @@ class MaterialRepository:
             )
             self._wait_for_meili_task(self.meili_client, settings_task)
 
-            if clear_existing_documents:
-                clear_task = materials_index.delete_all_documents()
-                self._wait_for_meili_task(self.meili_client, clear_task)
+            clear_task = materials_index.delete_all_documents()
+            self._wait_for_meili_task(self.meili_client, clear_task)
 
             for start in range(0, len(documents), MEILISEARCH_BATCH_SIZE):
                 batch = documents[start:start + MEILISEARCH_BATCH_SIZE]

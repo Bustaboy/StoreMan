@@ -7,6 +7,10 @@ from app.schemas.material import MaterialResponse
 router = APIRouter(tags=['materials'])
 
 
+def _normalize_string(value: object) -> str:
+    return str(value or '')
+
+
 def _normalize_optional_string(value: object) -> str | None:
     if value is None:
         return None
@@ -15,9 +19,24 @@ def _normalize_optional_string(value: object) -> str | None:
 
 
 def _to_material_response(material: Material) -> MaterialResponse:
-    material_number = str(getattr(material, 'material_number', '') or '')
-    description = str(getattr(material, 'description', '') or '')
-    quantity_on_hand = int(getattr(material, 'quantity', 0) or 0)
+    material_number = _normalize_string(
+        getattr(material, 'material_number', None)
+        or getattr(material, 'code', None)
+        or getattr(material, 'id', None)
+    )
+    name = _normalize_string(
+        getattr(material, 'name', None)
+        or getattr(material, 'description', None)
+    )
+    quantity_on_hand = int(
+        getattr(material, 'quantity_on_hand', None)
+        or getattr(material, 'quantity', 0)
+        or 0
+    )
+    description = _normalize_string(
+        getattr(material, 'description', None)
+        or name
+    )
     location = _normalize_optional_string(getattr(material, 'location', None))
     if location is None:
         default_location = getattr(material, 'default_location', None)
@@ -26,7 +45,7 @@ def _to_material_response(material: Material) -> MaterialResponse:
     return MaterialResponse(
         id=material_number,
         code=material_number,
-        name=description,
+        name=name,
         quantity_on_hand=quantity_on_hand,
         location=location,
         material_number=material_number,
