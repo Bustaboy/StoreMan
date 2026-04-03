@@ -73,6 +73,8 @@ class Material(Base):
     dg_proper_shipping_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     dg_segregation_rules: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     sap_material_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    manufacturer: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    manufacturer_material_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     inventory_items: Mapped[list[InventoryItem]] = relationship(back_populates="material")
     default_location: Mapped[Location | None] = relationship(
