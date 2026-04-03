@@ -16,6 +16,11 @@ class MaterialResponse(BaseModel):
 
     @computed_field
     @property
+    def id(self) -> str:
+        return self.material_number
+
+    @computed_field
+    @property
     def code(self) -> str:
         return self.material_number
 

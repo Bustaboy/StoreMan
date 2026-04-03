@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.core.config import get_settings
 from app.models.models import InventoryItem, Location, Material
 
+MEILISEARCH_BATCH_SIZE = 1000
+
 
 class MaterialRepository:
     def __init__(self) -> None:
@@ -31,13 +33,13 @@ class MaterialRepository:
         )
         async with self.session_factory() as session:
             materials = list((await session.scalars(stmt)).all())
+            await self._attach_quantities(session, materials)
 
-        return await self._attach_quantities(materials)
+        return materials
 
-
-    async def _attach_quantities(self, materials: list[Material]) -> list[Material]:
+    async def _attach_quantities(self, session: AsyncSession, materials: list[Material]) -> None:
         if not materials:
-            return materials
+            return
 
         material_numbers = [material.material_number for material in materials]
         qty_stmt = (
@@ -48,14 +50,10 @@ class MaterialRepository:
             .where(InventoryItem.material_id.in_(material_numbers))
             .group_by(InventoryItem.material_id)
         )
-
-        async with self.session_factory() as session:
-            quantities = {row.material_id: int(row.quantity or 0) for row in (await session.execute(qty_stmt)).all()}
+        quantities = {row.material_id: int(row.quantity or 0) for row in (await session.execute(qty_stmt)).all()}
 
         for material in materials:
             setattr(material, 'quantity', quantities.get(material.material_number, 0))
-
-        return materials
 
     async def search_materials(self, query: str, limit: int = 50) -> list[Material]:
         clean_limit = max(limit, 1)
@@ -77,8 +75,8 @@ class MaterialRepository:
         )
         async with self.session_factory() as session:
             materials = list((await session.scalars(stmt)).all())
+            await self._attach_quantities(session, materials)
 
-        materials = await self._attach_quantities(materials)
         return sorted(materials, key=lambda material: order.get(material.material_number, len(order)))
 
     async def sync_to_meilisearch(self) -> int:
@@ -113,12 +111,9 @@ class MaterialRepository:
             {
                 'id': row.material_number,
                 'material_number': row.material_number,
-                'code': row.material_number,
                 'description': row.description,
-                'name': row.description,
                 'category': row.category,
                 'quantity': int(row.quantity or 0),
-                'quantity_on_hand': int(row.quantity or 0),
                 'location': row.location,
                 'sap_material_number': row.sap_material_number,
                 'is_serialized': bool(row.is_serialized),
@@ -138,8 +133,11 @@ class MaterialRepository:
         )
         self.meili_client.wait_for_task(settings_task.task_uid)
 
-        task = materials_index.add_documents(documents, primary_key='id')
-        self.meili_client.wait_for_task(task.task_uid)
+        for start in range(0, len(documents), MEILISEARCH_BATCH_SIZE):
+            batch = documents[start:start + MEILISEARCH_BATCH_SIZE]
+            task = materials_index.add_documents(batch, primary_key='id')
+            self.meili_client.wait_for_task(task.task_uid)
+
         return len(documents)
 
 
